@@ -161,7 +161,7 @@ def srepr2matchpy(string, wildcards=False):
 
 def downvalues_rules(r):
     '''
-    Function Which generates parsed rules by substituting all possible
+    Function which generates parsed rules by substituting all possible
     combinations of default values.
     '''
     res = []

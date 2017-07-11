@@ -6,10 +6,6 @@ from itertools import chain, combinations
 with open('downvalues.txt','r') as f_open:
     full_string = f_open.read()
 
-full_string = '''
-List[RuleDelayed[HoldPattern[Int[Power[Plus[Pattern[a,Blank[]],Times[Optional[Pattern[b,Blank[]]],Pattern[x,Blank[]]]],-1],Pattern[x,Blank[Symbol]]]],Condition[Times[Log[RemoveContent[Plus[a,Times[b,x]],x]],Power[b,-1]],FreeQ[List[a,b],x]]]]
-'''
-
 replacements = dict(
         Times="Mul",
         Plus="Add",
@@ -40,7 +36,6 @@ def parse_full_form(wmexpr):
             stack.append(stack[-1][-1])
         last_pos = match.end()
     return out[0]
-
 
 def get_default_values(parsed, default_values={}):
     '''
@@ -148,7 +143,6 @@ def srepr2matchpy(string, wildcards=False):
     return string
 
 def seperate_freeq(s, variables=[], x=None):
-
     if s[0] == 'FreeQ':
         if len(s[1]) == 1:
             variables = [s[1]]
@@ -178,9 +172,9 @@ def downvalues_rules(r):
 from matchpy import Wildcard, Pattern, ReplacementRule, ManyToOneReplacer
 from .operation import *
 from .symbol import VariableSymbol, Integer
-from .constraint import cons
+from .constraint import cons, FreeQ
 
-a, b, c, d, e, f, g, h, x, u = map(VariableSymbol, 'abcdefghxu')
+a, b, c, d, e, f, g, h, x, u, p = map(VariableSymbol, 'abcdefghxup')
 n, m = map(VariableSymbol, 'nm')
 zoo = VariableSymbol('zoo')
 
@@ -195,6 +189,7 @@ def rubi_object():
     index = 0
 
     for i in r:
+        print(r.index(i))
         if i[1][1][0] == 'Condition':
             pattern = i[1][1][1].copy()
         else:

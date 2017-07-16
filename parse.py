@@ -178,7 +178,7 @@ a, b, c, d, e, f, g, h, x, u, p = map(VariableSymbol, 'abcdefghxup')
 n, m = map(VariableSymbol, 'nm')
 zoo = VariableSymbol('zoo')
 
-a_, b_, c_, d_, e_, f_, g_, h_ = map(Wildcard.dot, 'abcdefgh')
+a_, b_, c_, d_, e_, f_, g_, h_, p_ = map(Wildcard.dot, 'abcdefghp')
 n_, m_ = map(Wildcard.dot, 'nm')
 x_, u_ = map(Wildcard.symbol, 'xu')
 

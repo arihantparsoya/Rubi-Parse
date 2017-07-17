@@ -120,22 +120,25 @@ def add_wildcards(string):
 
     return string, symbols
 
-def powerset(iterable):
-    "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
-    s = list(iterable)
-    return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
-
-def srepr2matchpy(string, wildcards=False):
-
+def srepr2matchpy(string, wildcards=False, optional={}):
     for i in re.findall(r"(Function\('(\w+)'\))", string): # replace all ('Function'())
         string = string.replace(i[0], i[1])
 
-    if wildcards: # replace all ('Symbol'())
+    if optional != {}:
         for i in re.findall(r"(Symbol\('(\w+)'\))", string):
-            string = string.replace(i[0], i[1] + '_')
+            if i[1][0] in optional.keys():
+                string = string.replace(i[0], "Wildcard.optional('{}', Integer({}))".format(i[1][0], optional[i[1][0]]))
+            else:
+                if wildcards:
+                    string = string.replace(i[0], i[1] + '_')
+                else:
+                    string = string.replace(i[0], "Wildcard.dot('{}')".format(i[1][0]))
     else:
         for i in re.findall(r"(Symbol\('(\w+)'\))", string):
-            string = string.replace(i[0], i[1])
+            if wildcards:
+                string = string.replace(i[0], "Wildcard.dot('{}')".format(i[1][0]))
+            else:
+                string = string.replace(i[0], i[1])
 
     for i in re.findall(r"(Rational\(([+-]?(?<!\.)\b[0-9]+\b(?!\.[0-9])), ([+-]?(?<!\.)\b[0-9]+\b(?!\.[0-9]))\))", string): # replace all `Rational(, )` to `Rational(Integer(), Integer())`
         string = string.replace(i[0], 'Integer('+ i[1] + '/' + i[2] +')')
@@ -189,13 +192,13 @@ def rubi_object():
     index = 0
 
     for i in r:
-        print(r.index(i))
+        print('parsing rule {}'.format(r.index(i) + 1))
         if i[1][1][0] == 'Condition':
             pattern = i[1][1][1].copy()
         else:
             pattern = i[1][1].copy()
 
-        d = get_default_values(pattern, {})
+        optional = get_default_values(pattern, {})
         pattern = generate_sympy_from_parsed(pattern.copy())
         pattern, free_symbols = add_wildcards(pattern)
         free_symbols = list(set(free_symbols)) #remove common symbols
@@ -211,34 +214,23 @@ def rubi_object():
             transformed = generate_sympy_from_parsed(i[2][1].copy())
             FreeQ_vars, FreeQ_x = seperate_freeq(i[2][2].copy())
 
-        for j in powerset(d):
-            p = sympify(pattern)
-            c = sympify(condition)
-            if FreeQ_vars:
-                f_c = FreeQ_vars.copy()
-            else:
-                f_c = []
-            t = sympify(transformed)
-            f_symbols = free_symbols.copy()
+        p = sympify(pattern)
+        c = sympify(condition)
+        if FreeQ_vars:
+            f_c = FreeQ_vars.copy()
+        else:
+            f_c = []
+        t = sympify(transformed)
+        f_symbols = free_symbols.copy()
+        p = srepr2matchpy(srepr(p), optional=optional)
+        c = srepr2matchpy(srepr(c), wildcards=True)
+        t = srepr2matchpy(srepr(t))
+        freeq_c = parse_freeq(f_c, FreeQ_x)
 
-            for k in j:
-                p = p.subs(k + '_', d[k])
-                if not isinstance(c, bool):
-                    c = c.subs(k, d[k])
-                t = t.subs(k, d[k])
-                f_symbols.remove(k)
-                if k in f_c:
-                    f_c.remove(k)
-
-            p = srepr2matchpy(srepr(p))
-            c = srepr2matchpy(srepr(c), wildcards=True)
-            t = srepr2matchpy(srepr(t))
-            freeq_c = parse_freeq(f_c, FreeQ_x)
-
-            index += 1
-            parsed = parsed + '    pattern' + str(index) +' = Pattern(' + str(p) + '' + freeq_c + ', cons(' + str(c) + ', '+ str(tuple(f_symbols)).replace("'", "") +'))'
-            parsed = parsed + '\n    ' + 'rule' + str(index) +' = ReplacementRule(' + 'pattern' + str(index) + ', lambda ' + ', '.join(f_symbols) + ' : ' + str(t) + ')\n    '
-            parsed = parsed + 'rubi.add(rule'+ str(index) +')\n\n'
+        index += 1
+        parsed = parsed + '    pattern' + str(index) +' = Pattern(' + str(p) + '' + freeq_c + ', cons(' + str(c) + ', '+ str(tuple(f_symbols)).replace("'", "") +'))'
+        parsed = parsed + '\n    ' + 'rule' + str(index) +' = ReplacementRule(' + 'pattern' + str(index) + ', lambda ' + ', '.join(f_symbols) + ' : ' + str(t) + ')\n    '
+        parsed = parsed + 'rubi.add(rule'+ str(index) +')\n\n'
 
     parsed = parsed + '    return rubi\n'
     return parsed

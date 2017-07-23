@@ -1,7 +1,4 @@
 import re
-from sympy import srepr
-from sympy.core.sympify import sympify
-from itertools import chain, combinations
 
 with open('downvalues.txt','r') as f_open:
     full_string = f_open.read()
@@ -68,82 +65,29 @@ def get_default_values(parsed, default_values={}):
 
     return default_values
 
-def generate_sympy_from_parsed(parsed):
-    out = ""
 
-    if not isinstance(parsed, list):
-        return parsed
-
-    if parsed[0] != 'FreeQ':
-        if parsed[0] in replacements:
-            out += replacements[parsed[0]]
-        else:
-            out += parsed[0]
-
-        if len(parsed) == 1:
-            return out
-
-        result = [generate_sympy_from_parsed(i) for i in parsed[1:]]
-        if '' in result:
-            result.remove('')
-
-        out += "("
-        out += ", ".join(result)
-        out += ")"
-
-    return out
-
-def add_wildcards(string):
+def add_wildcards(string, optional={}):
     symbols = [] # stores symbols present in the expression
 
-    p = r'(Optional\(Pattern\((\w), Blank\)\))'
+    p = r'(Optional\(Pattern\((\w+), Blank\)\))'
     matches = re.findall(p, string)
     for i in matches:
-        try:
-            float(i[1])
-            string = string.replace(i[0], i[1])
-        except ValueError:
-            string = string.replace(i[0], i[1] + '_')
+        string = string.replace(i[0], "Wildcard.optional('{}', Integer({}))".format(i[1], optional[i[1]]))
         symbols.append(i[1])
 
-    p = r'(Pattern\((\w), Blank\))'
+    p = r'(Pattern\((\w+), Blank\))'
     matches = re.findall(p, string)
     for i in matches:
         string = string.replace(i[0], i[1] + '_')
         symbols.append(i[1])
 
-    p = r'(Pattern\((\w), Blank\(Symbol\)\))'
+    p = r'(Pattern\((\w+), Blank\(Symbol\)\))'
     matches = re.findall(p, string)
     for i in matches:
         string = string.replace(i[0], i[1] + '_')
         symbols.append(i[1])
 
     return string, symbols
-
-def srepr2matchpy(string, wildcards=False, optional={}):
-    for i in re.findall(r"(Function\('(\w+)'\))", string): # replace all ('Function'())
-        string = string.replace(i[0], i[1])
-
-    if optional != {}:
-        for i in re.findall(r"(Symbol\('(\w+)'\))", string):
-            if i[1][0] in optional.keys():
-                string = string.replace(i[0], "Wildcard.optional('{}', Integer({}))".format(i[1][0], optional[i[1][0]]))
-            else:
-                if wildcards:
-                    string = string.replace(i[0], i[1] + '_')
-                else:
-                    string = string.replace(i[0], "Wildcard.dot('{}')".format(i[1][0]))
-    else:
-        for i in re.findall(r"(Symbol\('(\w+)'\))", string):
-            if wildcards:
-                string = string.replace(i[0], "Wildcard.dot('{}')".format(i[1][0]))
-            else:
-                string = string.replace(i[0], i[1])
-
-    for i in re.findall(r"(Rational\(([+-]?(?<!\.)\b[0-9]+\b(?!\.[0-9])), ([+-]?(?<!\.)\b[0-9]+\b(?!\.[0-9]))\))", string): # replace all `Rational(, )` to `Rational(Integer(), Integer())`
-        string = string.replace(i[0], 'Integer('+ i[1] + '/' + i[2] +')')
-
-    return string
 
 def seperate_freeq(s, variables=[], x=None):
     if s[0] == 'FreeQ':
@@ -165,6 +109,46 @@ def parse_freeq(l, x):
         return ', ' + ', '.join(res)
     return ''
 
+def generate_sympy_from_parsed(parsed, wild=False, symbols=[]):
+    out = ""
+
+    if not isinstance(parsed, list):
+        if wild:
+            if (parsed in symbols):
+                return parsed + '_'
+            else:
+                return 'Integer({})'.format(parsed)
+        else:
+            if symbols==[]:
+                try:
+                    float(parsed)
+                    return 'Integer({})'.format(parsed)
+                except:
+                    return parsed
+            elif parsed in symbols:
+                return parsed
+            else:
+                return 'Integer({})'.format(parsed)
+
+    if parsed[0] != 'FreeQ':
+        if parsed[0] in replacements:
+            out += replacements[parsed[0]]
+        else:
+            out += parsed[0]
+
+        if len(parsed) == 1:
+            return out
+
+        result = [generate_sympy_from_parsed(i, wild=wild, symbols=symbols) for i in parsed[1:]]
+        if '' in result:
+            result.remove('')
+
+        out += "("
+        out += ", ".join(result)
+        out += ")"
+
+    return out
+
 def downvalues_rules(r):
     '''
     Function which generates parsed rules by substituting all possible
@@ -172,59 +156,117 @@ def downvalues_rules(r):
     '''
     res = []
     parsed = '''
-from matchpy import Wildcard, Pattern, ReplacementRule, ManyToOneReplacer
-from .operation import *
-from .symbol import VariableSymbol, Integer
-from .constraint import cons, FreeQ
+from sympy.external import import_module
+matchpy = import_module("matchpy")
 
-a, b, c, d, e, f, g, h, x, u, p = map(VariableSymbol, 'abcdefghxup')
+if matchpy:
+    Wildcard, Pattern, ReplacementRule, ManyToOneReplacer = matchpy.Wildcard, matchpy.Pattern, matchpy.ReplacementRule, matchpy.ManyToOneReplacer
+else:
+    Wildcard, Pattern, ReplacementRule, ManyToOneReplacer = object, object, object, object
+    class Wildcard(object):
+        def __init__(self):
+            pass
+        @staticmethod
+        def dot(x):
+            pass
+        @staticmethod
+        def symbol(x):
+            pass
+    class Pattern(object):
+        def __init__(self, a, b):
+            pass
+
+from sympy.integrals.rubi.operation import (Int, Mul, Add, Pow, And, Or, ZeroQ, NonzeroQ, List, Log, RemoveContent, PositiveIntegerQ, NegativeIntegerQ, PositiveQ, IntegerQ, IntegersQ, PosQ, NegQ, FracPart, IntPart, RationalQ, Subst, LinearQ, Sqrt, NegativeQ, ArcCosh, Rational, Less, Not, Simplify, Denominator, Coefficient, SumSimplerQ, Equal, Unequal, SimplerQ, LessEqual, IntLinearcQ, Greater, GreaterEqual, FractionQ, ExpandIntegrand, With, Set, Hypergeometric2F1, TogetherSimplify, Inequality, PerfectSquareQ, EvenQ, OddQ, EqQ, NiceSqrtQ, IntQuadraticQ, If, LeafCount, QuadraticQ, LinearMatchQ, QuadraticMatchQ, AtomQ, SplitProduct, SumBaseQ, NegSumBaseQ, IntBinomialQ, LinearPairQ, SimplerSqrtQ, PseudoBinomialPairQ, Rt, PolynomialQ, BinomialQ, BinomialMatchQ, BinomialDegree, GeneralizedBinomialQ, GeneralizedBinomialMatchQ, TrinomialQ, TrinomialMatchQ, GeneralizedTrinomialQ, GeneralizedTrinomialMatchQ, GeneralizedTrinomialDegree, PolyQ, Coeff, SumQ, Expon)
+from sympy.integrals.rubi.symbol import VariableSymbol, Integer
+from sympy.integrals.rubi.constraint import cons, FreeQ
+from sympy.utilities.decorator import doctest_depends_on
+
+A, B, C, a, b, c, d, e, f, g, h, i, j, k, x, u, v, w, p, q, r, s, z = map(VariableSymbol, 'ABCabcdefghijkxuvwpqrsz')
 n, m = map(VariableSymbol, 'nm')
 zoo = VariableSymbol('zoo')
+mn = VariableSymbol('mn')
+non2 = VariableSymbol('non2')
+a1 = VariableSymbol('a1')
+a2 = VariableSymbol('a2')
+b1 = VariableSymbol('b1')
+b2 = VariableSymbol('b2')
+c1 = VariableSymbol('c1')
+c2 = VariableSymbol('c2')
+d1 = VariableSymbol('d1')
+d2 = VariableSymbol('d2')
+e1 = VariableSymbol('e1')
+e2 = VariableSymbol('e2')
+f1 = VariableSymbol('f1')
+f2 = VariableSymbol('f2')
+n2 = VariableSymbol('n2')
+n3 = VariableSymbol('n3')
+Pq = VariableSymbol('Pq')
+Px = VariableSymbol('Px')
+jn = VariableSymbol('jn')
 
-a_, b_, c_, d_, e_, f_, g_, h_, p_ = map(Wildcard.dot, 'abcdefghp')
+A_, B_, C_, a_, b_, c_, d_, e_, f_, g_, h_, i_, j_, k_, p_, q_, r_, s_, w_, z_ = map(Wildcard.dot, 'ABCabcdefghijkpqrswz')
 n_, m_ = map(Wildcard.dot, 'nm')
-x_, u_ = map(Wildcard.symbol, 'xu')
-
+mn_ = Wildcard.dot('mn')
+non2_ = Wildcard.dot('non2')
+a1_ = Wildcard.dot('a1')
+a2_ = Wildcard.dot('a2')
+b1_ = Wildcard.dot('b1')
+b2_ = Wildcard.dot('b2')
+c1_ = Wildcard.dot('c1')
+c2_ = Wildcard.dot('c2')
+d1_ = Wildcard.dot('d1')
+d2_ = Wildcard.dot('d2')
+n2_ = Wildcard.dot('n2')
+e1_ = Wildcard.dot('e1')
+e2_ = Wildcard.dot('e2')
+f1_ = Wildcard.dot('f1')
+f2_ = Wildcard.dot('f2')
+n1_ = Wildcard.dot('n1')
+n2_ = Wildcard.dot('n2')
+n3_ = Wildcard.dot('n3')
+Pq_ = Wildcard.dot('Pq')
+Px_ = Wildcard.dot('Px')
+jn_ = Wildcard.dot('jn')
+x_, u_, v_ = map(Wildcard.symbol, 'xuv')
 
 def rubi_object():
     rubi = ManyToOneReplacer()
+
 '''
     index = 0
-
     for i in r:
         print('parsing rule {}'.format(r.index(i) + 1))
+
         if i[1][1][0] == 'Condition':
-            pattern = i[1][1][1].copy()
+            p = i[1][1][1].copy()
         else:
-            pattern = i[1][1].copy()
+            p = i[1][1].copy()
 
-        optional = get_default_values(pattern, {})
-        pattern = generate_sympy_from_parsed(pattern.copy())
-        pattern, free_symbols = add_wildcards(pattern)
+        optional = get_default_values(p, {})
+        pattern = generate_sympy_from_parsed(p.copy())
+        pattern, free_symbols = add_wildcards(pattern, optional=optional)
         free_symbols = list(set(free_symbols)) #remove common symbols
-
         if i[2][0] != 'Condition': # rules without constraints
             condition = 'True'
-            transformed = generate_sympy_from_parsed(i[2].copy())
+            transformed = generate_sympy_from_parsed(i[2].copy(), wild=False, symbols=free_symbols)
             FreeQ_vars, FreeQ_x = None, None
         else:
-            condition = generate_sympy_from_parsed(i[2][2])
+            condition = generate_sympy_from_parsed(i[2][2], wild=True, symbols=free_symbols)
             if condition == '':
                 condition = 'True'
-            transformed = generate_sympy_from_parsed(i[2][1].copy())
+            transformed = generate_sympy_from_parsed(i[2][1].copy(), wild=False, symbols=free_symbols)
             FreeQ_vars, FreeQ_x = seperate_freeq(i[2][2].copy())
 
-        p = sympify(pattern)
-        c = sympify(condition)
+        p = pattern
+        c = condition
+        t = transformed
+
         if FreeQ_vars:
             f_c = FreeQ_vars.copy()
         else:
             f_c = []
-        t = sympify(transformed)
+
         f_symbols = free_symbols.copy()
-        p = srepr2matchpy(srepr(p), optional=optional)
-        c = srepr2matchpy(srepr(c), wildcards=True)
-        t = srepr2matchpy(srepr(t))
         freeq_c = parse_freeq(f_c, FreeQ_x)
 
         index += 1

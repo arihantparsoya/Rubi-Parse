@@ -72,7 +72,7 @@ def add_wildcards(string, optional={}):
     p = r'(Optional\(Pattern\((\w+), Blank\)\))'
     matches = re.findall(p, string)
     for i in matches:
-        string = string.replace(i[0], "Wildcard.optional('{}', Integer({}))".format(i[1], optional[i[1]]))
+        string = string.replace(i[0], "Wildcard.optional('{}', matchpyInteger({}))".format(i[1], optional[i[1]]))
         symbols.append(i[1])
 
     p = r'(Pattern\((\w+), Blank\))'
@@ -117,18 +117,18 @@ def generate_sympy_from_parsed(parsed, wild=False, symbols=[]):
             if (parsed in symbols):
                 return parsed + '_'
             else:
-                return 'Integer({})'.format(parsed)
+                return 'matchpyInteger({})'.format(parsed)
         else:
             if symbols==[]:
                 try:
                     float(parsed)
-                    return 'Integer({})'.format(parsed)
+                    return 'matchpyInteger({})'.format(parsed)
                 except:
                     return parsed
             elif parsed in symbols:
                 return parsed
             else:
-                return 'Integer({})'.format(parsed)
+                return 'matchpyInteger({})'.format(parsed)
 
     if parsed[0] != 'FreeQ':
         if parsed[0] in replacements:
@@ -177,7 +177,7 @@ else:
             pass
 
 from sympy.integrals.rubi.operation import (Int, Mul, Add, Pow, And, Or, ZeroQ, NonzeroQ, List, Log, RemoveContent, PositiveIntegerQ, NegativeIntegerQ, PositiveQ, IntegerQ, IntegersQ, PosQ, NegQ, FracPart, IntPart, RationalQ, Subst, LinearQ, Sqrt, NegativeQ, ArcCosh, Rational, Less, Not, Simplify, Denominator, Coefficient, SumSimplerQ, Equal, Unequal, SimplerQ, LessEqual, IntLinearcQ, Greater, GreaterEqual, FractionQ, ExpandIntegrand, With, Set, Hypergeometric2F1, TogetherSimplify, Inequality, PerfectSquareQ, EvenQ, OddQ, EqQ, NiceSqrtQ, IntQuadraticQ, If, LeafCount, QuadraticQ, LinearMatchQ, QuadraticMatchQ, AtomQ, SplitProduct, SumBaseQ, NegSumBaseQ, IntBinomialQ, LinearPairQ, SimplerSqrtQ, PseudoBinomialPairQ, Rt, PolynomialQ, BinomialQ, BinomialMatchQ, BinomialDegree, GeneralizedBinomialQ, GeneralizedBinomialMatchQ, TrinomialQ, TrinomialMatchQ, GeneralizedTrinomialQ, GeneralizedTrinomialMatchQ, GeneralizedTrinomialDegree, PolyQ, Coeff, SumQ, Expon)
-from sympy.integrals.rubi.symbol import VariableSymbol, Integer
+from sympy.integrals.rubi.symbol import VariableSymbol, matchpyInteger
 from sympy.integrals.rubi.constraint import cons, FreeQ
 from sympy.utilities.decorator import doctest_depends_on
 

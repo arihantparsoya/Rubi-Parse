@@ -65,14 +65,13 @@ def get_default_values(parsed, default_values={}):
 
     return default_values
 
-
 def add_wildcards(string, optional={}):
     symbols = [] # stores symbols present in the expression
 
     p = r'(Optional\(Pattern\((\w+), Blank\)\))'
     matches = re.findall(p, string)
     for i in matches:
-        string = string.replace(i[0], "Wildcard.optional('{}', matchpyInteger({}))".format(i[1], optional[i[1]]))
+        string = string.replace(i[0], "WC(1, True, '{}', mpyInt({}))".format(i[1], optional[i[1]]))
         symbols.append(i[1])
 
     p = r'(Pattern\((\w+), Blank\))'
@@ -117,18 +116,18 @@ def generate_sympy_from_parsed(parsed, wild=False, symbols=[]):
             if (parsed in symbols):
                 return parsed + '_'
             else:
-                return 'matchpyInteger({})'.format(parsed)
+                return 'mpyInt({})'.format(parsed)
         else:
             if symbols==[]:
                 try:
                     float(parsed)
-                    return 'matchpyInteger({})'.format(parsed)
+                    return 'mpyInt({})'.format(parsed)
                 except:
                     return parsed
             elif parsed in symbols:
                 return parsed
             else:
-                return 'matchpyInteger({})'.format(parsed)
+                return 'mpyInt({})'.format(parsed)
 
     if parsed[0] != 'FreeQ':
         if parsed[0] in replacements:
@@ -149,6 +148,40 @@ def generate_sympy_from_parsed(parsed, wild=False, symbols=[]):
 
     return out
 
+def get_free_symbols(s, symbols, free_symbols=[]):
+    if not isinstance(s, list):
+        if s in symbols:
+            free_symbols.append(s)
+        return free_symbols
+
+    if len(s) == 1:
+        return free_symbols
+
+    for i in s:
+        free_symbols = get_free_symbols(i, symbols)
+
+    return free_symbols
+
+def _divide_constriant(s, symbols):
+    # Creates a CustomConstraint of the form `CustomConstraint(lambda a, x: FreeQ(a, x))`
+    if s[0] == 'FreeQ':
+        return ''
+    lambda_symbols = list(set(get_free_symbols(s, symbols, [])))
+    return 'CustomConstraint(lambda {}: {})'.format(','.join(lambda_symbols), generate_sympy_from_parsed(s))
+
+def divide_constraint(s, symbols):
+    if s[0] == 'And':
+        result = [_divide_constriant(i, symbols) for i in s[1:]]
+    else:
+        result = _divide_constriant(s, symbols)
+
+    r = ['']
+    for i in result:
+        if i != '':
+            r.append(i)
+
+    return ', '.join(r)
+
 def downvalues_rules(r):
     '''
     Function which generates parsed rules by substituting all possible
@@ -156,78 +189,31 @@ def downvalues_rules(r):
     '''
     res = []
     parsed = '''
-from sympy.external import import_module
-matchpy = import_module("matchpy")
+import matchpy
+Pattern, ReplacementRule, ManyToOneReplacer = matchpy.Pattern, matchpy.ReplacementRule, matchpy.ManyToOneReplacer
 
-if matchpy:
-    Wildcard, Pattern, ReplacementRule, ManyToOneReplacer = matchpy.Wildcard, matchpy.Pattern, matchpy.ReplacementRule, matchpy.ManyToOneReplacer
-else:
-    Wildcard, Pattern, ReplacementRule, ManyToOneReplacer = object, object, object, object
-    class Wildcard(object):
-        def __init__(self):
-            pass
-        @staticmethod
-        def dot(x):
-            pass
-        @staticmethod
-        def symbol(x):
-            pass
-    class Pattern(object):
-        def __init__(self, a, b):
-            pass
+from sympy import Symbol, Pow, Add, Integral, Basic
+from matchpy.expressions.functions import register_operation_iterator, register_operation_factory
+from matchpy import Operation, CommutativeOperation, AssociativeOperation, OneIdentityOperation, CustomConstraint
+from sympy.integrals.rubi.symbol import WC, mpyInt
+from sympy.integrals.rubi.constraint import freeQ
+from sympy.integrals.rubi.utility_function import FreeQ
 
-from sympy.integrals.rubi.operation import (Int, Mul, Add, Pow, And, Or, ZeroQ, NonzeroQ, List, Log, RemoveContent, PositiveIntegerQ, NegativeIntegerQ, PositiveQ, IntegerQ, IntegersQ, PosQ, NegQ, FracPart, IntPart, RationalQ, Subst, LinearQ, Sqrt, NegativeQ, ArcCosh, Rational, Less, Not, Simplify, Denominator, Coefficient, SumSimplerQ, Equal, Unequal, SimplerQ, LessEqual, IntLinearcQ, Greater, GreaterEqual, FractionQ, ExpandIntegrand, With, Set, Hypergeometric2F1, TogetherSimplify, Inequality, PerfectSquareQ, EvenQ, OddQ, EqQ, NiceSqrtQ, IntQuadraticQ, If, LeafCount, QuadraticQ, LinearMatchQ, QuadraticMatchQ, AtomQ, SplitProduct, SumBaseQ, NegSumBaseQ, IntBinomialQ, LinearPairQ, SimplerSqrtQ, PseudoBinomialPairQ, Rt, PolynomialQ, BinomialQ, BinomialMatchQ, BinomialDegree, GeneralizedBinomialQ, GeneralizedBinomialMatchQ, TrinomialQ, TrinomialMatchQ, GeneralizedTrinomialQ, GeneralizedTrinomialMatchQ, GeneralizedTrinomialDegree, PolyQ, Coeff, SumQ, Expon)
-from sympy.integrals.rubi.symbol import VariableSymbol, matchpyInteger
-from sympy.integrals.rubi.constraint import cons, FreeQ
-from sympy.utilities.decorator import doctest_depends_on
+Operation.register(Integral)
+register_operation_iterator(Integral, lambda a: (a._args[0],) + a._args[1], lambda a: len(a._args))
 
-A, B, C, a, b, c, d, e, f, g, h, i, j, k, x, u, v, w, p, q, r, s, z = map(VariableSymbol, 'ABCabcdefghijkxuvwpqrsz')
-n, m = map(VariableSymbol, 'nm')
-zoo = VariableSymbol('zoo')
-mn = VariableSymbol('mn')
-non2 = VariableSymbol('non2')
-a1 = VariableSymbol('a1')
-a2 = VariableSymbol('a2')
-b1 = VariableSymbol('b1')
-b2 = VariableSymbol('b2')
-c1 = VariableSymbol('c1')
-c2 = VariableSymbol('c2')
-d1 = VariableSymbol('d1')
-d2 = VariableSymbol('d2')
-e1 = VariableSymbol('e1')
-e2 = VariableSymbol('e2')
-f1 = VariableSymbol('f1')
-f2 = VariableSymbol('f2')
-n2 = VariableSymbol('n2')
-n3 = VariableSymbol('n3')
-Pq = VariableSymbol('Pq')
-Px = VariableSymbol('Px')
-jn = VariableSymbol('jn')
+Operation.register(Pow)
+OneIdentityOperation.register(Pow)
+register_operation_iterator(Pow, lambda a: a._args, lambda a: len(a._args))
 
-A_, B_, C_, a_, b_, c_, d_, e_, f_, g_, h_, i_, j_, k_, p_, q_, r_, s_, w_, z_ = map(Wildcard.dot, 'ABCabcdefghijkpqrswz')
-n_, m_ = map(Wildcard.dot, 'nm')
-mn_ = Wildcard.dot('mn')
-non2_ = Wildcard.dot('non2')
-a1_ = Wildcard.dot('a1')
-a2_ = Wildcard.dot('a2')
-b1_ = Wildcard.dot('b1')
-b2_ = Wildcard.dot('b2')
-c1_ = Wildcard.dot('c1')
-c2_ = Wildcard.dot('c2')
-d1_ = Wildcard.dot('d1')
-d2_ = Wildcard.dot('d2')
-n2_ = Wildcard.dot('n2')
-e1_ = Wildcard.dot('e1')
-e2_ = Wildcard.dot('e2')
-f1_ = Wildcard.dot('f1')
-f2_ = Wildcard.dot('f2')
-n1_ = Wildcard.dot('n1')
-n2_ = Wildcard.dot('n2')
-n3_ = Wildcard.dot('n3')
-Pq_ = Wildcard.dot('Pq')
-Px_ = Wildcard.dot('Px')
-jn_ = Wildcard.dot('jn')
-x_, u_, v_ = map(Wildcard.symbol, 'xuv')
+def sympy_op_factory(old_operation, new_operands, variable_name):
+     return type(old_operation)(*new_operands)
+
+register_operation_factory(Basic, sympy_op_factory)
+
+A_, B_, C_, a_, b_, c_, d_, e_, f_, g_, h_, i_, j_, k_, l_, m_, n_, p_, q_, r_, s_, w_, x_, z_ = [WC(1, True, i) for i in 'ABCabcdefghijklmnpqrswxz']
+mn_ = WC(1, True, 'mn')
+non2_ =  WC(1, True, 'non2')
 
 def rubi_object():
     rubi = ManyToOneReplacer()
@@ -247,18 +233,17 @@ def rubi_object():
         pattern, free_symbols = add_wildcards(pattern, optional=optional)
         free_symbols = list(set(free_symbols)) #remove common symbols
         if i[2][0] != 'Condition': # rules without constraints
-            condition = 'True'
+            constriant = ''
             transformed = generate_sympy_from_parsed(i[2].copy(), wild=False, symbols=free_symbols)
             FreeQ_vars, FreeQ_x = None, None
         else:
-            condition = generate_sympy_from_parsed(i[2][2], wild=True, symbols=free_symbols)
-            if condition == '':
-                condition = 'True'
+            #constriant = generate_sympy_from_parsed(i[2][2], wild=True, symbols=free_symbols)
+            constriant = divide_constraint(i[2][2], free_symbols)
             transformed = generate_sympy_from_parsed(i[2][1].copy(), wild=False, symbols=free_symbols)
             FreeQ_vars, FreeQ_x = seperate_freeq(i[2][2].copy())
 
         p = pattern
-        c = condition
+        c = constriant
         t = transformed
 
         if FreeQ_vars:
@@ -270,7 +255,7 @@ def rubi_object():
         freeq_c = parse_freeq(f_c, FreeQ_x)
 
         index += 1
-        parsed = parsed + '    pattern' + str(index) +' = Pattern(' + str(p) + '' + freeq_c + ', cons(' + str(c) + ', '+ str(tuple(f_symbols)).replace("'", "") +'))'
+        parsed = parsed + '    pattern' + str(index) +' = Pattern(' + str(p) + '' + freeq_c + '' + str(c) + ')'
         parsed = parsed + '\n    ' + 'rule' + str(index) +' = ReplacementRule(' + 'pattern' + str(index) + ', lambda ' + ', '.join(f_symbols) + ' : ' + str(t) + ')\n    '
         parsed = parsed + 'rubi.add(rule'+ str(index) +')\n\n'
 

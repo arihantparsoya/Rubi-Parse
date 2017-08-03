@@ -71,7 +71,7 @@ def add_wildcards(string, optional={}):
     p = r'(Optional\(Pattern\((\w+), Blank\)\))'
     matches = re.findall(p, string)
     for i in matches:
-        string = string.replace(i[0], "WC(1, True, '{}', mpyInt({}))".format(i[1], optional[i[1]]))
+        string = string.replace(i[0], "WC(1, True, '{}', S('{}'))".format(i[1], optional[i[1]]))
         symbols.append(i[1])
 
     p = r'(Pattern\((\w+), Blank\))'
@@ -103,7 +103,7 @@ def seperate_freeq(s, variables=[], x=None):
 def parse_freeq(l, x):
     res = []
     for i in l:
-        res.append(('FreeQ({}, {})').format(i, x))
+        res.append(('CustomConstraint(lambda {}, {}: FreeQ({}, {}))').format(i, x, i, x))
     if res != []:
         return ', ' + ', '.join(res)
     return ''
@@ -116,24 +116,29 @@ def generate_sympy_from_parsed(parsed, wild=False, symbols=[]):
             if (parsed in symbols):
                 return parsed + '_'
             else:
-                return 'mpyInt({})'.format(parsed)
+                return "S('{}')".format(parsed)
         else:
             if symbols==[]:
                 try:
                     float(parsed)
-                    return 'mpyInt({})'.format(parsed)
+                    return "S('{}')".format(parsed)
                 except:
                     return parsed
             elif parsed in symbols:
                 return parsed
             else:
-                return 'mpyInt({})'.format(parsed)
+                return "S('{}')".format(parsed)
 
-    if parsed[0] != 'FreeQ':
+    if parsed[0] == 'Rational':
+        return 'S({})/S({})'.format(generate_sympy_from_parsed(parsed[1]), generate_sympy_from_parsed(parsed[2]))
+    elif parsed[0] != 'FreeQ':
         if parsed[0] in replacements:
             out += replacements[parsed[0]]
         else:
-            out += parsed[0]
+            if parsed[0] == 'Int':
+                out += 'Integral'
+            else:
+                out += parsed[0]
 
         if len(parsed) == 1:
             return out
@@ -154,11 +159,8 @@ def get_free_symbols(s, symbols, free_symbols=[]):
             free_symbols.append(s)
         return free_symbols
 
-    if len(s) == 1:
-        return free_symbols
-
     for i in s:
-        free_symbols = get_free_symbols(i, symbols)
+        free_symbols = get_free_symbols(i, symbols, free_symbols)
 
     return free_symbols
 
@@ -167,7 +169,7 @@ def _divide_constriant(s, symbols):
     if s[0] == 'FreeQ':
         return ''
     lambda_symbols = list(set(get_free_symbols(s, symbols, [])))
-    return 'CustomConstraint(lambda {}: {})'.format(','.join(lambda_symbols), generate_sympy_from_parsed(s))
+    return 'CustomConstraint(lambda {}: {})'.format(', '.join(lambda_symbols), generate_sympy_from_parsed(s))
 
 def divide_constraint(s, symbols):
     if s[0] == 'And':
@@ -192,26 +194,40 @@ def downvalues_rules(r):
 import matchpy
 Pattern, ReplacementRule, ManyToOneReplacer = matchpy.Pattern, matchpy.ReplacementRule, matchpy.ManyToOneReplacer
 
-from sympy import Symbol, Pow, Add, Integral, Basic
+from sympy import Symbol, Pow, Add, Integral, Basic, Mul, S, Or, And
 from matchpy.expressions.functions import register_operation_iterator, register_operation_factory
 from matchpy import Operation, CommutativeOperation, AssociativeOperation, OneIdentityOperation, CustomConstraint
-from sympy.integrals.rubi.symbol import WC, mpyInt
-from sympy.integrals.rubi.constraint import freeQ
-from sympy.integrals.rubi.utility_function import FreeQ
+from sympy.integrals.rubi.symbol import WC
+from sympy.integrals.rubi.utility_function import (Int, Set, With, Scan, MapAnd, FalseQ, ZeroQ, NegativeQ, NonzeroQ, FreeQ, List, Log, PositiveQ, PositiveIntegerQ, NegativeIntegerQ, IntegerQ, IntegersQ, ComplexNumberQ, RealNumericQ, PositiveOrZeroQ, NegativeOrZeroQ, FractionOrNegativeQ, NegQ, Equal, Unequal, IntPart, FracPart, RationalQ, ProductQ, SumQ, NonsumQ, Subst, First, Rest, SqrtNumberQ, SqrtNumberSumQ, LinearQ, Sqrt, ArcCosh, Coefficient, Denominator, Hypergeometric2F1, ArcTan, Not, Simplify, FractionalPart, IntegerPart, AppellF1, EllipticPi, EllipticE, EllipticF, ArcTan, ArcTanh, ArcSin, ArcSinh, ArcCos, ArcCsc, ArcCsch, Sinh, Tanh, Cosh, Sech, Csch, Coth, LessEqual, Less, Greater, GreaterEqual, FractionQ, IntLinearcQ, Expand, IndependentQ, PowerQ, IntegerPowerQ, PositiveIntegerPowerQ, FractionalPowerQ, AtomQ, ExpQ, LogQ, Head, MemberQ, TrigQ, SinQ, CosQ, TanQ, CotQ, SecQ, CscQ, HyperbolicQ, SinhQ, CoshQ, TanhQ, CothQ, SechQ, CschQ, InverseTrigQ, SinCosQ, SinhCoshQ, Rt, LeafCount, Numerator, NumberQ, NumericQ, Length, ListQ, Im, Re, InverseHyperbolicQ, InverseFunctionQ, TrigHyperbolicFreeQ, InverseFunctionFreeQ, RealQ, EqQ, FractionalPowerFreeQ, ComplexFreeQ, PolynomialQ, FactorSquareFree, PowerOfLinearQ, Exponent, QuadraticQ, LinearPairQ, BinomialParts, TrinomialParts, PolyQ, EvenQ, OddQ, PerfectSquareQ, NiceSqrtAuxQ, NiceSqrtQ, Together, FixSimplify, TogetherSimplify, PosAux, PosQ, CoefficientList, ReplaceAll, ExpandLinearProduct, GCD, ContentFactor, NumericFactor, NonnumericFactors, MakeAssocList, GensymSubst, KernelSubst, ExpandExpression, Apart, SmartApart, MatchQ, PolynomialQuotientRemainder, FreeFactors, NonfreeFactors, RemoveContentAux, RemoveContent, FreeTerms, NonfreeTerms, ExpandAlgebraicFunction, CollectReciprocals, ExpandCleanup, AlgebraicFunctionQ, Coeff, LeadTerm, RemainingTerms, LeadFactor, RemainingFactors, LeadBase, LeadDegree, Numer, Denom, hypergeom, Expon, MergeMonomials, PolynomialDivide, BinomialQ, TrinomialQ, GeneralizedBinomialQ, GeneralizedTrinomialQ, FactorSquareFreeList, PerfectPowerTest, SquareFreeFactorTest, RationalFunctionQ, RationalFunctionFactors, NonrationalFunctionFactors, Reverse, RationalFunctionExponents, RationalFunctionExpand, ExpandIntegrand, SimplerQ, SimplerSqrtQ, SumSimplerQ, SumSimplerAuxQ, BinomialDegree, TrinomialDegree, CancelCommonFactors, SimplerIntegrandQ, GeneralizedBinomialDegree, GeneralizedBinomialParts, GeneralizedTrinomialDegree, GeneralizedTrinomialParts, MonomialQ, MonomialSumQ, MinimumMonomialExponent, MonomialExponent, LinearMatchQ, PowerOfLinearMatchQ, QuadraticMatchQ, CubicMatchQ, BinomialMatchQ, TrinomialMatchQ, GeneralizedBinomialMatchQ, GeneralizedTrinomialMatchQ, QuotientOfLinearsMatchQ, PolynomialTermQ, PolynomialTerms, NonpolynomialTerms, PseudoBinomialParts, NormalizePseudoBinomial, PseudoBinomialPairQ, PseudoBinomialQ, PolynomialGCD, PolyGCD, AlgebraicFunctionFactors, NonalgebraicFunctionFactors, QuotientOfLinearsP, QuotientOfLinearsParts, QuotientOfLinearsQ, Flatten, Sort, AbsurdNumberQ, AbsurdNumberFactors, NonabsurdNumberFactors, SumSimplerAuxQ, SumSimplerQ, Prepend, Drop, CombineExponents, FactorInteger, FactorAbsurdNumber, SubstForInverseFunction, SubstForFractionalPower, SubstForFractionalPowerOfQuotientOfLinears, FractionalPowerOfQuotientOfLinears, SubstForFractionalPowerQ, SubstForFractionalPowerAuxQ, FractionalPowerOfSquareQ, FractionalPowerSubexpressionQ, Apply, FactorNumericGcd, MergeableFactorQ, MergeFactor, MergeFactors, TrigSimplifyQ, TrigSimplify, Order, FactorOrder, Smallest, OrderedQ, MinimumDegree, PositiveFactors, Sign, NonpositiveFactors, PolynomialInAuxQ, PolynomialInQ, ExponentInAux, ExponentIn, PolynomialInSubstAux, PolynomialInSubst, Distrib, DistributeDegree, FunctionOfPower, DivideDegreesOfFactors, MonomialFactor, FullSimplify, FunctionOfLinearSubst, FunctionOfLinear, NormalizeIntegrand, NormalizeIntegrandAux, NormalizeIntegrandFactor, NormalizeIntegrandFactorBase, NormalizeTogether, NormalizeLeadTermSigns, AbsorbMinusSign, NormalizeSumFactors, SignOfFactor, NormalizePowerOfLinear, SimplifyIntegrand, SimplifyTerm, TogetherSimplify, SmartSimplify, SubstForExpn, ExpandToSum, UnifySum, UnifyTerms, UnifyTerm, CalculusQ, FunctionOfInverseLinear, PureFunctionOfSinhQ, PureFunctionOfTanhQ, PureFunctionOfCoshQ, IntegerQuotientQ, OddQuotientQ, EvenQuotientQ, FindTrigFactor, FunctionOfSinhQ, FunctionOfCoshQ, OddHyperbolicPowerQ, FunctionOfTanhQ, FunctionOfTanhWeight, FunctionOfHyperbolicQ, SmartNumerator, SmartDenominator, SubstForAux, ActivateTrig, ExpandTrig, TrigExpand, SubstForTrig, SubstForHyperbolic, InertTrigFreeQ, LCM, SubstForFractionalPowerOfLinear, FractionalPowerOfLinear, InverseFunctionOfLinear, InertTrigQ, InertReciprocalQ, ActivateTrig, DeactivateTrig, FixInertTrigFunction, DeactivateTrigAux, DeactivateTrigAux, PowerOfInertTrigSumQ, PiecewiseLinearQ, KnownTrigIntegrandQ, KnownSineIntegrandQ, KnownTangentIntegrandQ, KnownCotangentIntegrandQ, KnownSecantIntegrandQ, ExpandTrigExpand, ExpandTrigReduce, TryPureTanSubst, TryTanhSubst, TryPureTanhSubst, AbsurdNumberGCD, AbsurdNumberGCDList, Map2, ConstantFactor, SameQ, ReplacePart, CommonFactors, MostMainFactorPosition, FunctionOfExponentialQ, FunctionOfExponential, FunctionOfExponentialFunction, FunctionOfExponentialFunctionAux, FunctionOfExponentialTest, FunctionOfExponentialTestAux)
 
 Operation.register(Integral)
-register_operation_iterator(Integral, lambda a: (a._args[0],) + a._args[1], lambda a: len(a._args))
+register_operation_iterator(Integral, lambda a: (a._args[0],) + a._args[1], lambda a: len((a._args[0],) + a._args[1]))
 
 Operation.register(Pow)
 OneIdentityOperation.register(Pow)
 register_operation_iterator(Pow, lambda a: a._args, lambda a: len(a._args))
+
+Operation.register(Add)
+OneIdentityOperation.register(Add)
+CommutativeOperation.register(Add)
+AssociativeOperation.register(Add)
+register_operation_iterator(Add, lambda a: a._args, lambda a: len(a._args))
+
+Operation.register(Mul)
+OneIdentityOperation.register(Mul)
+CommutativeOperation.register(Mul)
+AssociativeOperation.register(Mul)
+register_operation_iterator(Mul, lambda a: a._args, lambda a: len(a._args))
 
 def sympy_op_factory(old_operation, new_operands, variable_name):
      return type(old_operation)(*new_operands)
 
 register_operation_factory(Basic, sympy_op_factory)
 
-A_, B_, C_, a_, b_, c_, d_, e_, f_, g_, h_, i_, j_, k_, l_, m_, n_, p_, q_, r_, s_, w_, x_, z_ = [WC(1, True, i) for i in 'ABCabcdefghijklmnpqrswxz']
+a = Symbol('a')
+x = Symbol('x')
+
+A_, B_, C_, a_, b_, c_, d_, e_, f_, g_, h_, i_, j_, k_, l_, m_, n_, p_, q_, r_, t_, u_, s_, w_, x_, z_ = [WC(1, True, i) for i in 'ABCabcdefghijklmnpqrtuswxz']
 mn_ = WC(1, True, 'mn')
 non2_ =  WC(1, True, 'non2')
 
@@ -270,6 +286,7 @@ for i in res: # separate all rules
         rules.append(i)
 
 result = downvalues_rules(rules)
+#result = result.replace('Int(',  'Integral(')
 
 f = open("patterns.py","w")
 f.write(result)

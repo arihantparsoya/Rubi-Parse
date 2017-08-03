@@ -108,7 +108,7 @@ def parse_freeq(l, x):
         return ', ' + ', '.join(res)
     return ''
 
-def generate_sympy_from_parsed(parsed, wild=False, symbols=[]):
+def generate_sympy_from_parsed(parsed, wild=False, symbols=[], pattern=True):
     out = ""
 
     if not isinstance(parsed, list):
@@ -135,7 +135,7 @@ def generate_sympy_from_parsed(parsed, wild=False, symbols=[]):
         if parsed[0] in replacements:
             out += replacements[parsed[0]]
         else:
-            if parsed[0] == 'Int':
+            if parsed[0] == 'Int' and pattern:
                 out += 'Integral'
             else:
                 out += parsed[0]
@@ -255,7 +255,7 @@ def rubi_object():
         else:
             #constriant = generate_sympy_from_parsed(i[2][2], wild=True, symbols=free_symbols)
             constriant = divide_constraint(i[2][2], free_symbols)
-            transformed = generate_sympy_from_parsed(i[2][1].copy(), wild=False, symbols=free_symbols)
+            transformed = generate_sympy_from_parsed(i[2][1].copy(), wild=False, symbols=free_symbols, pattern=False)
             FreeQ_vars, FreeQ_x = seperate_freeq(i[2][2].copy())
 
         p = pattern

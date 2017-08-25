@@ -6,8 +6,55 @@ replacements = dict(
         Times="Mul",
         Plus="Add",
         Power="Pow",
-        Sum="_Sum" # Temporarily replace `Sum` because it can raise errors while sympifying
+        Log='log',
+        Sqrt='sqrt',
+        Cos='cos',
+        Sin='sin',
+        Tan='tan',
+        Cot='cot',
+        Sec='sec',
+        Csc='csc',
+        ArcSin='asin',
+        ArcCot='acot',
+        ArcTan='atan',
+        ArcCot='acot',
+        ArcSec='asec',
+        ArcCsc='acsc',
+        Sinh='sinh',
+        Tanh='tanh',
+        Coth='coth',
+        Sech='sech',
+        Csch='csch',
+        ArcSinh='asinh',
+        ArcCoth='acoth',
+        ArcTanh='atanh',
+        ArcCoth='acoth',
+        ArcSech='asech',
+        ArcCsch='acsch',
+        Expand='expand',
+        Im='im',
+        Re='re',
+        Together='together',
+        Flatten='flatten',
+        Polylog='polylog',
+        Cancel='cancel',
+        Gamma='gamma',
+        TrigExpand='expand_trig',
+        Sign='sign',
+        Simplify='simplify',
+        Defer='UnevaluatedExpr',
 )
+
+temporary_variable_replacement = { # Temporarily rename because it can raise errors while sympifying
+        'Sum' : "_Sum",
+        'gcd' : "_gcd",
+        'jn' : "_jn",
+}
+
+permanent_variable_replacement = { # Permamenely rename these variables
+    "\[ImaginaryI]" : 'ImaginaryI',
+    "$UseGamma": '_UseGamma',
+}
 
 def parse_full_form(wmexpr):
     '''
@@ -111,18 +158,23 @@ def seperate_freeq(s, variables=[], x=None):
             variables, x = seperate_freeq(i, variables, x)
     return variables, x
 
-def parse_freeq(l, x):
+def parse_freeq(l, x, symbols=None):
     '''
     Divies FreeQ() constraint into smaller constraints.
     '''
     res = []
     for i in l:
-        res.append(('CustomConstraint(lambda {}, {}: FreeQ({}, {}))').format(i, x, i, x))
+        if isinstance(i, str):
+            res.append(('CustomConstraint(lambda {}, {}: FreeQ({}, {}))').format(i, x, i, x))
+        elif isinstance(i, list):
+            s = list(set(get_free_symbols(i, symbols)))
+            s = ', '.join(s)
+            res.append(('CustomConstraint(lambda {}: FreeQ({}, {}))').format(s, generate_sympy_from_parsed(i), x))
     if res != []:
         return ', ' + ', '.join(res)
     return ''
 
-def generate_sympy_from_parsed(parsed, wild=False, symbols=[], replace_Int=False):
+def generate_sympy_from_parsed(parsed, wild=False, symbols=[], replace_Int=False, parse_FreeQ=True):
     '''
     Parses list into Python syntax
 
@@ -208,7 +260,7 @@ def setWC(string):
     '''
     Replaces `WC(a, b)` by `WC('a', S(b))`
     '''
-    p = r'(WC\((\w+), ([-+]?\d)\))'
+    p = r'(WC\((\w+), S\(([-+]?\d)\)\))'
     matches = re.findall(p, string)
     for i in matches:
         string = string.replace(i[0], "WC('{}', S({}))".format(i[1], i[2]))
@@ -222,125 +274,28 @@ def downvalues_rules(r):
     '''
     res = []
     parsed = '''
-
 from sympy.external import import_module
 matchpy = import_module("matchpy")
 from sympy.utilities.decorator import doctest_depends_on
 
 if matchpy:
-    Pattern, ReplacementRule, ManyToOneReplacer = matchpy.Pattern, matchpy.ReplacementRule, matchpy.ManyToOneReplacer
-    from matchpy import Operation, CommutativeOperation, AssociativeOperation, OneIdentityOperation, CustomConstraint
-    from matchpy.expressions.functions import register_operation_iterator, register_operation_factory
-
-    from sympy import Pow, Add, Integral, Basic, Mul, S, Or, And, symbols
-    from sympy.functions import (log, sin, cos, tan, cot, csc, sec, sqrt, erf)
-    from sympy.functions.elementary.hyperbolic import acosh, asinh, atanh, acoth, acsch, asech, cosh, sinh, tanh, coth, sech, csch
-    from sympy.functions.elementary.trigonometric import atan, acsc, asin, acot, acos, asec
+    from matchpy import Pattern, ReplacementRule, CustomConstraint
+    from sympy.integrals.rubi.utility_function import (Int, Set, With, Module, Scan, MapAnd, FalseQ, ZeroQ, NegativeQ, NonzeroQ, FreeQ, NFreeQ, List, Log, PositiveQ, PositiveIntegerQ, NegativeIntegerQ, IntegerQ, IntegersQ, ComplexNumberQ, PureComplexNumberQ, RealNumericQ, PositiveOrZeroQ, NegativeOrZeroQ, FractionOrNegativeQ, NegQ, Equal, Unequal, IntPart, FracPart, RationalQ, ProductQ, SumQ, NonsumQ, Subst, First, Rest, SqrtNumberQ, SqrtNumberSumQ, LinearQ, Sqrt, ArcCosh, Coefficient, Denominator, Hypergeometric2F1, Not, Simplify, FractionalPart, IntegerPart, AppellF1, EllipticPi, EllipticE, EllipticF, ArcTan, ArcCot, ArcCoth, ArcTanh, ArcSin, ArcSinh, ArcCos, ArcCsc, ArcSec, ArcCsch, ArcSech, Sinh, Tanh, Cosh, Sech, Csch, Coth, LessEqual, Less, Greater, GreaterEqual, FractionQ, IntLinearcQ, Expand, IndependentQ, PowerQ, IntegerPowerQ, PositiveIntegerPowerQ, FractionalPowerQ, AtomQ, ExpQ, LogQ, Head, MemberQ, TrigQ, SinQ, CosQ, TanQ, CotQ, SecQ, CscQ, Sin, Cos, Tan, Cot, Sec, Csc, HyperbolicQ, SinhQ, CoshQ, TanhQ, CothQ, SechQ, CschQ, InverseTrigQ, SinCosQ, SinhCoshQ, LeafCount, Numerator, NumberQ, NumericQ, Length, ListQ, Im, Re, InverseHyperbolicQ, InverseFunctionQ, TrigHyperbolicFreeQ, InverseFunctionFreeQ, RealQ, EqQ, FractionalPowerFreeQ, ComplexFreeQ, PolynomialQ, FactorSquareFree, PowerOfLinearQ, Exponent, QuadraticQ, LinearPairQ, BinomialParts, TrinomialParts, PolyQ, EvenQ, OddQ, PerfectSquareQ, NiceSqrtAuxQ, NiceSqrtQ, Together, PosAux, PosQ, CoefficientList, ReplaceAll, ExpandLinearProduct, GCD, ContentFactor, NumericFactor, NonnumericFactors, MakeAssocList, GensymSubst, KernelSubst, ExpandExpression, Apart, SmartApart, MatchQ, PolynomialQuotientRemainder, FreeFactors, NonfreeFactors, RemoveContentAux, RemoveContent, FreeTerms, NonfreeTerms, ExpandAlgebraicFunction, CollectReciprocals, ExpandCleanup, AlgebraicFunctionQ, Coeff, LeadTerm, RemainingTerms, LeadFactor, RemainingFactors, LeadBase, LeadDegree, Numer, Denom, hypergeom, Expon, MergeMonomials, PolynomialDivide, BinomialQ, TrinomialQ, GeneralizedBinomialQ, GeneralizedTrinomialQ, FactorSquareFreeList, PerfectPowerTest, SquareFreeFactorTest, RationalFunctionQ, RationalFunctionFactors, NonrationalFunctionFactors, Reverse, RationalFunctionExponents, RationalFunctionExpand, ExpandIntegrand, SimplerQ, SimplerSqrtQ, SumSimplerQ, BinomialDegree, TrinomialDegree, CancelCommonFactors, SimplerIntegrandQ, GeneralizedBinomialDegree, GeneralizedBinomialParts, GeneralizedTrinomialDegree, GeneralizedTrinomialParts, MonomialQ, MonomialSumQ, MinimumMonomialExponent, MonomialExponent, LinearMatchQ, PowerOfLinearMatchQ, QuadraticMatchQ, CubicMatchQ, BinomialMatchQ, TrinomialMatchQ, GeneralizedBinomialMatchQ, GeneralizedTrinomialMatchQ, QuotientOfLinearsMatchQ, PolynomialTermQ, PolynomialTerms, NonpolynomialTerms, PseudoBinomialParts, NormalizePseudoBinomial, PseudoBinomialPairQ, PseudoBinomialQ, PolynomialGCD, PolyGCD, AlgebraicFunctionFactors, NonalgebraicFunctionFactors, QuotientOfLinearsP, QuotientOfLinearsParts, QuotientOfLinearsQ, Flatten, Sort, AbsurdNumberQ, AbsurdNumberFactors, NonabsurdNumberFactors, SumSimplerAuxQ, Prepend, Drop, CombineExponents, FactorInteger, FactorAbsurdNumber, SubstForInverseFunction, SubstForFractionalPower, SubstForFractionalPowerOfQuotientOfLinears, FractionalPowerOfQuotientOfLinears, SubstForFractionalPowerQ, SubstForFractionalPowerAuxQ, FractionalPowerOfSquareQ, FractionalPowerSubexpressionQ, Apply, FactorNumericGcd, MergeableFactorQ, MergeFactor, MergeFactors, TrigSimplifyQ, TrigSimplify, TrigSimplifyRecur, Order, FactorOrder, Smallest, OrderedQ, MinimumDegree, PositiveFactors, Sign, NonpositiveFactors, PolynomialInAuxQ, PolynomialInQ, ExponentInAux, ExponentIn, PolynomialInSubstAux, PolynomialInSubst, Distrib, DistributeDegree, FunctionOfPower, DivideDegreesOfFactors, MonomialFactor, FullSimplify, FunctionOfLinearSubst, FunctionOfLinear, NormalizeIntegrand, NormalizeIntegrandAux, NormalizeIntegrandFactor, NormalizeIntegrandFactorBase, NormalizeTogether, NormalizeLeadTermSigns, AbsorbMinusSign, NormalizeSumFactors, SignOfFactor, NormalizePowerOfLinear, SimplifyIntegrand, SimplifyTerm, TogetherSimplify, SmartSimplify, SubstForExpn, ExpandToSum, UnifySum, UnifyTerms, UnifyTerm, CalculusQ, FunctionOfInverseLinear, PureFunctionOfSinhQ, PureFunctionOfTanhQ, PureFunctionOfCoshQ, IntegerQuotientQ, OddQuotientQ, EvenQuotientQ, FindTrigFactor, FunctionOfSinhQ, FunctionOfCoshQ, OddHyperbolicPowerQ, FunctionOfTanhQ, FunctionOfTanhWeight, FunctionOfHyperbolicQ, SmartNumerator, SmartDenominator, SubstForAux, ActivateTrig, ExpandTrig, TrigExpand, SubstForTrig, SubstForHyperbolic, InertTrigFreeQ, LCM, SubstForFractionalPowerOfLinear, FractionalPowerOfLinear, InverseFunctionOfLinear, InertTrigQ, InertReciprocalQ, DeactivateTrig, FixInertTrigFunction, DeactivateTrigAux, PowerOfInertTrigSumQ, PiecewiseLinearQ, KnownTrigIntegrandQ, KnownSineIntegrandQ, KnownTangentIntegrandQ, KnownCotangentIntegrandQ, KnownSecantIntegrandQ, TryPureTanSubst, TryTanhSubst, TryPureTanhSubst, AbsurdNumberGCD, AbsurdNumberGCDList, ExpandTrigExpand, ExpandTrigReduce, ExpandTrigReduceAux, NormalizeTrig, TrigToExp, ExpandTrigToExp, TrigReduce, FunctionOfTrig, AlgebraicTrigFunctionQ, FunctionOfHyperbolic, FunctionOfQ, FunctionOfExpnQ, PureFunctionOfSinQ, PureFunctionOfCosQ, PureFunctionOfTanQ, PureFunctionOfCotQ, FunctionOfCosQ, FunctionOfSinQ, OddTrigPowerQ, FunctionOfTanQ, FunctionOfTanWeight, FunctionOfTrigQ, FunctionOfDensePolynomialsQ, FunctionOfLog, PowerVariableExpn, PowerVariableDegree, PowerVariableSubst, EulerIntegrandQ, FunctionOfSquareRootOfQuadratic, SquareRootOfQuadraticSubst, Divides, EasyDQ, ProductOfLinearPowersQ, Rt, NthRoot, AtomBaseQ, SumBaseQ, NegSumBaseQ, AllNegTermQ, SomeNegTermQ, TrigSquareQ, RtAux, TrigSquare, IntSum, IntTerm, Map2, ConstantFactor, SameQ, ReplacePart, CommonFactors, MostMainFactorPosition, FunctionOfExponentialQ, FunctionOfExponential, FunctionOfExponentialFunction, FunctionOfExponentialFunctionAux, FunctionOfExponentialTest, FunctionOfExponentialTestAux, stdev, rubi_test, If, IntQuadraticQ, IntBinomialQ, RectifyTangent, RectifyCotangent, Inequality, Condition, Simp, SimpHelp, SplitProduct, SplitSum, Complex, UnsameQ, _SimpFixFactor, SimpFixFactor, _FixSimplify, FixSimplify, _SimplifyAntiderivativeSum, SimplifyAntiderivativeSum, _SimplifyAntiderivative, SimplifyAntiderivative, _TrigSimplifyAux, TrigSimplifyAux, Gamma, Cancel, Part, PolyLog, D, FunctionOfTrigOfLinearQ, ElementaryFunctionQ, Dist, SubstFor)
+    from sympy import Integral, S, sqrt
     from sympy.integrals.rubi.symbol import WC
-    from sympy.integrals.rubi.utility_function import (Int, Set, With, Scan, MapAnd, FalseQ, ZeroQ, NegativeQ, NonzeroQ, FreeQ, List, Log, PositiveQ, PositiveIntegerQ, NegativeIntegerQ, IntegerQ, IntegersQ, ComplexNumberQ, PureComplexNumberQ, RealNumericQ, PositiveOrZeroQ, NegativeOrZeroQ, FractionOrNegativeQ, NegQ, Equal, Unequal, IntPart, FracPart, RationalQ, ProductQ, SumQ, NonsumQ, Subst, First, Rest, SqrtNumberQ, SqrtNumberSumQ, LinearQ, Sqrt, ArcCosh, Coefficient, Denominator, Hypergeometric2F1, Not, Simplify, FractionalPart, IntegerPart, AppellF1, EllipticPi, EllipticE, EllipticF, ArcTan, ArcTanh, ArcSin, ArcSinh, ArcCos, ArcCsc, ArcCsch, Sinh, Tanh, Cosh, Sech, Csch, Coth, LessEqual, Less, Greater, GreaterEqual, FractionQ, IntLinearcQ, Expand, IndependentQ, PowerQ, IntegerPowerQ, PositiveIntegerPowerQ, FractionalPowerQ, AtomQ, ExpQ, LogQ, Head, MemberQ, TrigQ, SinQ, CosQ, TanQ, CotQ, SecQ, CscQ, HyperbolicQ, SinhQ, CoshQ, TanhQ, CothQ, SechQ, CschQ, InverseTrigQ, SinCosQ, SinhCoshQ, LeafCount, Numerator, NumberQ, NumericQ, Length, ListQ, Im, Re, InverseHyperbolicQ, InverseFunctionQ, TrigHyperbolicFreeQ, InverseFunctionFreeQ, RealQ, EqQ, FractionalPowerFreeQ, ComplexFreeQ, PolynomialQ, FactorSquareFree, PowerOfLinearQ, Exponent, QuadraticQ, LinearPairQ, BinomialParts, TrinomialParts, PolyQ, EvenQ, OddQ, PerfectSquareQ, NiceSqrtAuxQ, NiceSqrtQ, Together, FixSimplify, PosAux, PosQ, CoefficientList, ReplaceAll, ExpandLinearProduct, GCD, ContentFactor, NumericFactor, NonnumericFactors, MakeAssocList, GensymSubst, KernelSubst, ExpandExpression, Apart, SmartApart, MatchQ, PolynomialQuotientRemainder, FreeFactors, NonfreeFactors, RemoveContentAux, RemoveContent, FreeTerms, NonfreeTerms, ExpandAlgebraicFunction, CollectReciprocals, ExpandCleanup, AlgebraicFunctionQ, Coeff, LeadTerm, RemainingTerms, LeadFactor, RemainingFactors, LeadBase, LeadDegree, Numer, Denom, hypergeom, Expon, MergeMonomials, PolynomialDivide, BinomialQ, TrinomialQ, GeneralizedBinomialQ, GeneralizedTrinomialQ, FactorSquareFreeList, PerfectPowerTest, SquareFreeFactorTest, RationalFunctionQ, RationalFunctionFactors, NonrationalFunctionFactors, Reverse, RationalFunctionExponents, RationalFunctionExpand, ExpandIntegrand, SimplerQ, SimplerSqrtQ, SumSimplerQ, BinomialDegree, TrinomialDegree, CancelCommonFactors, SimplerIntegrandQ, GeneralizedBinomialDegree, GeneralizedBinomialParts, GeneralizedTrinomialDegree, GeneralizedTrinomialParts, MonomialQ, MonomialSumQ, MinimumMonomialExponent, MonomialExponent, LinearMatchQ, PowerOfLinearMatchQ, QuadraticMatchQ, CubicMatchQ, BinomialMatchQ, TrinomialMatchQ, GeneralizedBinomialMatchQ, GeneralizedTrinomialMatchQ, QuotientOfLinearsMatchQ, PolynomialTermQ, PolynomialTerms, NonpolynomialTerms, PseudoBinomialParts, NormalizePseudoBinomial, PseudoBinomialPairQ, PseudoBinomialQ, PolynomialGCD, PolyGCD, AlgebraicFunctionFactors, NonalgebraicFunctionFactors, QuotientOfLinearsP, QuotientOfLinearsParts, QuotientOfLinearsQ, Flatten, Sort, AbsurdNumberQ, AbsurdNumberFactors, NonabsurdNumberFactors, SumSimplerAuxQ, Prepend, Drop, CombineExponents, FactorInteger, FactorAbsurdNumber, SubstForInverseFunction, SubstForFractionalPower, SubstForFractionalPowerOfQuotientOfLinears, FractionalPowerOfQuotientOfLinears, SubstForFractionalPowerQ, SubstForFractionalPowerAuxQ, FractionalPowerOfSquareQ, FractionalPowerSubexpressionQ, Apply, FactorNumericGcd, MergeableFactorQ, MergeFactor, MergeFactors, TrigSimplifyQ, TrigSimplify, Order, FactorOrder, Smallest, OrderedQ, MinimumDegree, PositiveFactors, Sign, NonpositiveFactors, PolynomialInAuxQ, PolynomialInQ, ExponentInAux, ExponentIn, PolynomialInSubstAux, PolynomialInSubst, Distrib, DistributeDegree, FunctionOfPower, DivideDegreesOfFactors, MonomialFactor, FullSimplify, FunctionOfLinearSubst, FunctionOfLinear, NormalizeIntegrand, NormalizeIntegrandAux, NormalizeIntegrandFactor, NormalizeIntegrandFactorBase, NormalizeTogether, NormalizeLeadTermSigns, AbsorbMinusSign, NormalizeSumFactors, SignOfFactor, NormalizePowerOfLinear, SimplifyIntegrand, SimplifyTerm, TogetherSimplify, SmartSimplify, SubstForExpn, ExpandToSum, UnifySum, UnifyTerms, UnifyTerm, CalculusQ, FunctionOfInverseLinear, PureFunctionOfSinhQ, PureFunctionOfTanhQ, PureFunctionOfCoshQ, IntegerQuotientQ, OddQuotientQ, EvenQuotientQ, FindTrigFactor, FunctionOfSinhQ, FunctionOfCoshQ, OddHyperbolicPowerQ, FunctionOfTanhQ, FunctionOfTanhWeight, FunctionOfHyperbolicQ, SmartNumerator, SmartDenominator, SubstForAux, ActivateTrig, ExpandTrig, TrigExpand, SubstForTrig, SubstForHyperbolic, InertTrigFreeQ, LCM, SubstForFractionalPowerOfLinear, FractionalPowerOfLinear, InverseFunctionOfLinear, InertTrigQ, InertReciprocalQ, DeactivateTrig, FixInertTrigFunction, DeactivateTrigAux, PowerOfInertTrigSumQ, PiecewiseLinearQ, KnownTrigIntegrandQ, KnownSineIntegrandQ, KnownTangentIntegrandQ, KnownCotangentIntegrandQ, KnownSecantIntegrandQ, TryPureTanSubst, TryTanhSubst, TryPureTanhSubst, AbsurdNumberGCD, AbsurdNumberGCDList, ExpandTrigExpand, ExpandTrigReduce, ExpandTrigReduceAux, NormalizeTrig, TrigToExp, ExpandTrigToExp, TrigReduce, FunctionOfTrig, AlgebraicTrigFunctionQ, FunctionOfHyperbolic, FunctionOfQ, FunctionOfExpnQ, PureFunctionOfSinQ, PureFunctionOfCosQ, PureFunctionOfTanQ, PureFunctionOfCotQ, FunctionOfCosQ, FunctionOfSinQ, OddTrigPowerQ, FunctionOfTanQ, FunctionOfTanWeight, FunctionOfTrigQ, FunctionOfDensePolynomialsQ, FunctionOfLog, PowerVariableExpn, PowerVariableDegree, PowerVariableSubst, EulerIntegrandQ, FunctionOfSquareRootOfQuadratic, SquareRootOfQuadraticSubst, Divides, EasyDQ, ProductOfLinearPowersQ, Rt, NthRoot, AtomBaseQ, SumBaseQ, NegSumBaseQ, AllNegTermQ, SomeNegTermQ, TrigSquareQ, RtAux, TrigSquare, IntSum, IntTerm, Map2, ConstantFactor, SameQ, ReplacePart, CommonFactors, MostMainFactorPosition, FunctionOfExponentialQ, FunctionOfExponential, FunctionOfExponentialFunction, FunctionOfExponentialFunctionAux, FunctionOfExponentialTest, FunctionOfExponentialTestAux, stdev, rubi_test, If, IntQuadraticQ, IntBinomialQ, RectifyTangent, RectifyCotangent, Inequality, Condition, SimpFixFactor, Simp, SimpHelp, SplitProduct, SplitSum)
+    from sympy.core.symbol import symbols
+    from sympy.functions import (log, sin, cos, tan, cot, csc, sec, sqrt, erf, exp, log)
+    from sympy.functions.elementary.hyperbolic import (acosh, asinh, atanh, acoth, acsch, asech, cosh, sinh, tanh, coth, sech, csch)
+    from sympy.functions.elementary.trigonometric import (atan, acsc, asin, acot, acos, asec)
 
-    Operation.register(Integral)
-    register_operation_iterator(Integral, lambda a: (a._args[0],) + a._args[1], lambda a: len((a._args[0],) + a._args[1]))
 
-    Operation.register(Pow)
-    OneIdentityOperation.register(Pow)
-    register_operation_iterator(Pow, lambda a: a._args, lambda a: len(a._args))
+    A_, B_, C_, F_, G_, H_, a_, b_, c_, d_, e_, f_, g_, h_, i_, j_, k_, l_, m_, n_, p_, q_, r_, t_, u_, v_, s_, w_, x_, y_, z_ = [WC(i) for i in 'ABCFGHabcdefghijklmnpqrtuvswxyz']
+    a1_, a2_, b1_, b2_, c1_, c2_, d1_, d2_, n1_, n2_, e1_, e2_, f1_, f2_, g1_, g2_, n1_, n2_, n3_, Pq_, Pm_, Px_, Qm_, Qr_, Qx_, jn_, mn_, non2_, RFx_, RGx_ = [WC(i) for i in ['a1', 'a2', 'b1', 'b2', 'c1', 'c2', 'd1', 'd2', 'n1', 'n2', 'e1', 'e2', 'f1', 'f2', 'g1', 'g2', 'n1', 'n2', 'n3',' Pq', 'Pm', ' Px', 'Qm', 'Qr', 'Qx', 'jn', 'mn', 'non2', 'RFx', 'RGx']]
+    d, p, q, r, s, v, mn, gcd, P, Q, lst = symbols('d p q r s v mn gcd P Q lst')
 
-    Operation.register(Add)
-    OneIdentityOperation.register(Add)
-    CommutativeOperation.register(Add)
-    AssociativeOperation.register(Add)
-    register_operation_iterator(Add, lambda a: a._args, lambda a: len(a._args))
+    _UseGamma = False
 
-    Operation.register(Mul)
-    OneIdentityOperation.register(Mul)
-    CommutativeOperation.register(Mul)
-    AssociativeOperation.register(Mul)
-    register_operation_iterator(Mul, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(sin)
-    register_operation_iterator(sin, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(cos)
-    register_operation_iterator(cos, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(tan)
-    register_operation_iterator(tan, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(cot)
-    register_operation_iterator(cot, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(csc)
-    register_operation_iterator(csc, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(sec)
-    register_operation_iterator(sec, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(sinh)
-    register_operation_iterator(sinh, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(cosh)
-    register_operation_iterator(cosh, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(tanh)
-    register_operation_iterator(tanh, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(coth)
-    register_operation_iterator(coth, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(csch)
-    register_operation_iterator(csch, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(sech)
-    register_operation_iterator(sech, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(asin)
-    register_operation_iterator(asin, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(acos)
-    register_operation_iterator(acos, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(atan)
-    register_operation_iterator(atan, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(acot)
-    register_operation_iterator(acot, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(acsc)
-    register_operation_iterator(acsc, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(asec)
-    register_operation_iterator(asec, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(asinh)
-    register_operation_iterator(asinh, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(acosh)
-    register_operation_iterator(acosh, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(atanh)
-    register_operation_iterator(atanh, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(acoth)
-    register_operation_iterator(acoth, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(acsch)
-    register_operation_iterator(acsch, lambda a: a._args, lambda a: len(a._args))
-
-    Operation.register(asech)
-    register_operation_iterator(asech, lambda a: a._args, lambda a: len(a._args))
-
-    def sympy_op_factory(old_operation, new_operands, variable_name):
-         return type(old_operation)(*new_operands)
-
-    register_operation_factory(Basic, sympy_op_factory)
-
-    A_, B_, C_, a_, b_, c_, d_, e_, f_, g_, h_, i_, j_, k_, l_, m_, n_, p_, q_, r_, t_, u_, v_, s_, w_, x_, z_ = [WC(i) for i in 'ABCabcdefghijklmnpqrtuvswxz']
-    a1_, a2_, b1_, b2_, c1_, c2_, d1_, d2_, n1_, n2_, e1_, e2_, f1_, f2_, n1_, n2_, n3_, Pq_, Pm_, Px_, Qm_, Qr_, jn_, mn_, non2_ = [WC(i) for i in ['a1', 'a2', 'b1', 'b2', 'c1', 'c2', 'd1', 'd2', 'n1', 'n2', 'e1', 'e2', 'f1', 'f2', 'n1', 'n2', 'n3',' Pq', 'Pm', ' Px', 'Qm', 'Qr', 'jn', 'mn', 'non2']]
-    p, q = symbols('p q')
-
-def rubi_object():
-    rubi = ManyToOneReplacer()
+def rubi_object(rubi):
 
 '''
     index = 0
@@ -368,26 +323,30 @@ def rubi_object():
             FreeQ_vars, FreeQ_x = [], []
             transformed = generate_sympy_from_parsed(i[2].copy(), symbols=free_symbols)
 
-        FreeQ_constraint = parse_freeq(FreeQ_vars, FreeQ_x)
+        FreeQ_constraint = parse_freeq(FreeQ_vars, FreeQ_x, free_symbols)
         pattern = sympify(pattern)
         pattern = sstr(pattern, sympy_integers=True)
         pattern = setWC(pattern)
         transformed = sympify(transformed)
+        transformed = sstr(transformed, sympy_integers=True)
 
         index += 1
         parsed = parsed + '    pattern' + str(index) +' = Pattern(' + pattern + '' + FreeQ_constraint + '' + constriant + ')'
-        parsed = parsed + '\n    ' + 'rule' + str(index) +' = ReplacementRule(' + 'pattern' + sstr(index, sympy_integers=True) + ', lambda ' + ', '.join(free_symbols) + ' : ' + str(transformed) + ')\n    '
+        parsed = parsed + '\n    ' + 'rule' + str(index) +' = ReplacementRule(' + 'pattern' + sstr(index, sympy_integers=True) + ', lambda ' + ', '.join(free_symbols) + ' : ' + transformed + ')\n    '
         parsed = parsed + 'rubi.add(rule'+ str(index) +')\n\n'
 
     parsed = parsed + '    return rubi\n'
-
-    # Replace modified functions such as `_Sum`
-    parsed = parsed.replace('_Sum', 'Sum') 
 
     return parsed
 
 with open('downvalues.txt','r') as f_open:
     full_string = f_open.read()
+
+for i in temporary_variable_replacement:
+    full_string = full_string.replace(i, temporary_variable_replacement[i])
+
+for i in permanent_variable_replacement:
+    full_string = full_string.replace(i, permanent_variable_replacement[i])
 
 res = parse_full_form(full_string)
 rules = []
@@ -397,6 +356,10 @@ for i in res: # separate all rules
         rules.append(i)
 
 result = downvalues_rules(rules)
+
+for i in temporary_variable_replacement:
+    result = result.replace(temporary_variable_replacement[i], i)
+
 
 f = open("patterns.py","w")
 f.write(result)
